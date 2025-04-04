@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>VDWA - Custom Commands</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+        }
+
+        input,
+        select {
+            margin: 5px 0;
+            padding: 8px;
+            width: 100%;
+        }
+
+        .command-item {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>Custom Command Builder</h2>
+
+    <input id="trigger" type="text" placeholder="Voice command (e.g., Post tweet)">
+    <select id="action">
+        <option value="click">Click Element</option>
+        <option value="focus">Focus Element</option>
+        <option value="type">Type Into Field</option>
+    </select>
+    <input id="target" type="text" placeholder="Target selector (e.g., .tweet-button)">
+    <input id="value" type="text" placeholder="Optional text input (for type)">
+
+    <button id="save">Save Command</button>
+
+    <hr>
+    <h3>Saved Commands</h3>
+    <div id="commands"></div>
+
+    <script src="options.js"></script>
+</body>
+
+</html>
