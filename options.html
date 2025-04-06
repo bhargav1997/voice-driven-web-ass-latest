@@ -5,180 +5,284 @@
     <meta charset="UTF-8" />
     <title>VDWA – Command Builder</title>
     <style>
-        body {
-            font-family: 'Segoe UI', sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f9fbfd;
-            color: #333;
+        :root {
+            --primary: #4A90E2;
+            --success: #27AE60;
+            --danger: #E74C3C;
+            --dark: #2C3E50;
+            --light: #F8FAFC;
+            --border: #E2E8F0;
         }
 
-        h1,
-        h2,
-        h3 {
-            margin-top: 0;
-            color: #222;
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            margin: 0;
+            padding: 40px;
+            background-color: var(--light);
+            color: var(--dark);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .header img {
+            width: 48px;
+            height: 48px;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--dark);
         }
 
         .card {
             background: white;
-            border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
         }
 
-        input,
-        select,
-        button {
-            margin-top: 8px;
-            margin-bottom: 12px;
-            padding: 10px;
-            font-size: 1rem;
+        .card h2 {
+            margin: 0 0 20px 0;
+            font-size: 20px;
+            color: var(--dark);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--dark);
+        }
+
+        input, select {
             width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border: 2px solid var(--border);
             border-radius: 8px;
-            border: 1px solid #ccc;
+            transition: all 0.3s ease;
+            box-sizing: border-box;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
         }
 
         button {
-            background-color: #007bff;
-            color: white;
-            font-weight: bold;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
             cursor: pointer;
+            transition: all 0.3s ease;
         }
 
-        button:hover {
-            background-color: #0056b3;
+        button.primary {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        button.primary:hover {
+            background-color: #357ABD;
+            transform: translateY(-1px);
+        }
+
+        button.delete {
+            background-color: var(--danger);
+            color: white;
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+
+        button.delete:hover {
+            background-color: #C0392B;
+        }
+
+        .command-list {
+            display: grid;
+            gap: 16px;
         }
 
         .command-item {
-            background: #f1f5f9;
-            padding: 10px;
-            margin: 6px 0;
-            border-radius: 6px;
+            background: #F7FAFC;
+            padding: 16px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            position: relative;
         }
 
-        .command-item small {
-            display: block;
-            color: #777;
-            font-size: 0.85em;
+        .command-item strong {
+            color: var(--primary);
+            font-size: 18px;
+        }
+
+        .command-meta {
+            margin-top: 8px;
+            color: #64748B;
+            font-size: 14px;
         }
 
         .built-in-table {
             width: 100%;
-            border-collapse: collapse;
+            border-collapse: separate;
+            border-spacing: 0;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
         }
 
         .built-in-table th,
         .built-in-table td {
-            border: 1px solid #ccc;
-            padding: 8px;
+            padding: 12px 16px;
             text-align: left;
+            border-bottom: 1px solid var(--border);
         }
 
         .built-in-table th {
-            background-color: #e8f0fe;
+            background-color: #F1F5F9;
+            font-weight: 600;
+            color: var(--dark);
         }
 
-        .delete-btn {
-            background-color: #dc3545;
-            margin-top: 6px;
+        .built-in-table tr:last-child td {
+            border-bottom: none;
         }
 
-        .delete-btn:hover {
-            background-color: #b02a37;
+        .built-in-table tr:hover td {
+            background-color: #F8FAFC;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 20px;
+            }
+
+            .card {
+                padding: 16px;
+            }
         }
     </style>
 </head>
 
 <body>
-    <h1>🛠️ VDWA – Command Builder</h1>
+    <div class="container">
+        <div class="header">
+            <img src="./icons/icon-48.png" alt="VDWA Logo">
+            <h1>Voice-Driven Web Assistant</h1>
+        </div>
 
-    <div class="card">
-        <h2>Create New Custom Command</h2>
-        <input id="trigger" type="text" placeholder="Voice command (e.g., Post tweet)">
-        <select id="action">
-            <option value="click">Click Element</option>
-            <option value="focus">Focus Element</option>
-            <option value="type">Type Into Field</option>
-        </select>
-        <input id="target" type="text" placeholder="Target selector (e.g., .btn-send)">
-        <input id="value" type="text" placeholder="Optional text (only for 'type')">
-        <button id="save">Save Command</button>
-    </div>
+        <div class="card">
+            <h2>✨ Create New Custom Command</h2>
+            <div class="form-group">
+                <label class="form-label" for="trigger">Voice Command</label>
+                <input id="trigger" type="text" placeholder="e.g., Post tweet">
+            </div>
 
-    <div class="card">
-        <h2>📋 Your Saved Commands</h2>
-        <div id="commands"></div>
-    </div>
+            <div class="form-group">
+                <label class="form-label" for="action">Action Type</label>
+                <select id="action">
+                    <option value="click">Click Element</option>
+                    <option value="focus">Focus Element</option>
+                    <option value="type">Type Into Field</option>
+                </select>
+            </div>
 
-    <div class="card">
-        <h2>🧠 Built-In Voice Commands</h2>
-        <p>These commands work out-of-the-box on any website:</p>
-        <table class="built-in-table">
-            <tr>
-                <th>Command</th>
-                <th>What It Does</th>
-            </tr>
-            <tr>
-                <td>scroll down</td>
-                <td>Scrolls the page down</td>
-            </tr>
-            <tr>
-                <td>scroll up</td>
-                <td>Scrolls the page up</td>
-            </tr>
-            <tr>
-                <td>go back</td>
-                <td>Navigates to the previous page</td>
-            </tr>
-            <tr>
-                <td>go forward</td>
-                <td>Navigates forward</td>
-            </tr>
-            <tr>
-                <td>refresh</td>
-                <td>Reloads the current page</td>
-            </tr>
-            <tr>
-                <td>click login</td>
-                <td>Clicks the element with text “login”</td>
-            </tr>
-            <tr>
-                <td>focus on search</td>
-                <td>Focuses on input with “search” placeholder</td>
-            </tr>
-            <tr>
-                <td>type hello world</td>
-                <td>Types “hello world” in the focused input</td>
-            </tr>
-            <tr>
-                <td>zoom in</td>
-                <td>Zooms in the page</td>
-            </tr>
-            <tr>
-                <td>zoom out</td>
-                <td>Zooms out the page</td>
-            </tr>
-            <tr>
-                <td>copy</td>
-                <td>Copy selected text or input value</td>
-            </tr>
-            <tr>
-                <td>paste</td>
-                <td>Paste into focused input</td>
-            </tr>
-            <tr>
-                <td>select all</td>
-                <td>Selects all text on page or input</td>
-            </tr>
-            <tr>
-                <td>delete</td>
-                <td>Clears focused input</td>
-            </tr>
+            <div class="form-group">
+                <label class="form-label" for="target">Target Selector</label>
+                <input id="target" type="text" placeholder="e.g., .btn-send">
+            </div>
 
+            <div class="form-group">
+                <label class="form-label" for="value">Text Value (optional)</label>
+                <input id="value" type="text" placeholder="Text to type (only for 'type' action)">
+            </div>
 
-        </table>
+            <button id="save" class="primary">Save Command</button>
+        </div>
+
+        <div class="card">
+            <h2>📋 Your Custom Commands</h2>
+            <div id="commands" class="command-list"></div>
+        </div>
+
+        <div class="card">
+            <h2>🎯 Built-In Voice Commands</h2>
+            <p>These commands are available on any website:</p>
+            <table class="built-in-table">
+                <thead>
+                    <tr>
+                        <th>Command</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>scroll down/up</td>
+                        <td>Scrolls the page</td>
+                    </tr>
+                    <tr>
+                        <td>go back/forward</td>
+                        <td>Navigates through history</td>
+                    </tr>
+                    <tr>
+                        <td>refresh</td>
+                        <td>Reloads the current page</td>
+                    </tr>
+                    <tr>
+                        <td>click login</td>
+                        <td>Clicks element with text "login"</td>
+                    </tr>
+                    <tr>
+                        <td>focus on search</td>
+                        <td>Focuses search input</td>
+                    </tr>
+                    <tr>
+                        <td>type hello world</td>
+                        <td>Types in focused input</td>
+                    </tr>
+                    <tr>
+                        <td>zoom in/out</td>
+                        <td>Adjusts page zoom</td>
+                    </tr>
+                    <tr>
+                        <td>copy/paste</td>
+                        <td>Clipboard operations</td>
+                    </tr>
+                    <tr>
+                        <td>select all</td>
+                        <td>Selects all text</td>
+                    </tr>
+                    <tr>
+                        <td>delete</td>
+                        <td>Clears input field</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <script src="options.js"></script>

@@ -27,7 +27,10 @@ async function loadCommands() {
    container.innerHTML = "";
 
    if (commands.length === 0) {
-      container.innerHTML = `<p>No custom commands yet. Create one above!</p>`;
+      container.innerHTML = `
+         <div style="text-align: center; padding: 32px; color: #64748B;">
+            <p>No custom commands yet. Create one above! ☝️</p>
+         </div>`;
       return;
    }
 
@@ -35,10 +38,16 @@ async function loadCommands() {
       const div = document.createElement("div");
       div.className = "command-item";
       div.innerHTML = `
-        <strong>“${cmd.trigger}”</strong><br>
-        Action: ${cmd.action}<br>
-        Target: ${cmd.target} ${cmd.value ? `<br>Value: ${cmd.value}` : ""}
-        <button class="delete-btn" onclick="deleteCommand(${index})">Delete</button>
+         <strong>"${cmd.trigger}"</strong>
+         <div class="command-meta">
+            <div>🎯 Action: ${cmd.action}</div>
+            <div>🎯 Target: ${cmd.target}</div>
+            ${cmd.value ? `<div>✍️ Value: ${cmd.value}</div>` : ""}
+         </div>
+         <button class="delete" onclick="deleteCommand(${index})" 
+                 style="position: absolute; top: 12px; right: 12px;">
+            Delete
+         </button>
       `;
       container.appendChild(div);
    });

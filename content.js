@@ -76,17 +76,21 @@ chrome.runtime.onMessage.addListener((msg) => {
 
 // Initialize speech recognition
 function initSpeechRecognition() {
-   if (!SPEECH_RECOGNITION_ENABLED) return;
+   if (!SPEECH_RECOGNITION_ENABLED) {
+      console.error("❌ Speech recognition is disabled");
+      return;
+   }
 
    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
    if (!SpeechRecognition) {
-      console.warn("Web Speech API not supported.");
+      console.error("❌ Web Speech API not supported in this browser");
       speak("Your browser does not support voice recognition.");
       return;
    }
 
    // If recognition is already running, don't start a new one
    if (recognition && recognition.running) {
+      console.log("ℹ️ Recognition is already running");
       return;
    }
 
@@ -95,24 +99,48 @@ function initSpeechRecognition() {
    // Create new recognition instance
    recognition = new SpeechRecognition();
    recognition.continuous = true;
-   recognition.interimResults = false;
+   recognition.interimResults = true; // Changed to true for better response
    recognition.lang = settings.language;
 
-   // Set up event handlers
-   recognition.onstart = handleRecognitionStart;
-   recognition.onresult = handleRecognitionResult;
-   recognition.onerror = handleRecognitionError;
-   recognition.onend = handleRecognitionEnd;
+   // Set up event handlers with improved logging
+   recognition.onstart = () => {
+      console.log("🎤 Recognition started successfully");
+      updateFeedbackElement(true, "Listening...");
+   };
 
-   // Start recognition
+   recognition.onresult = (event) => {
+      console.log("🎯 Recognition result received:", event.results);
+      const transcript = event.results[event.results.length - 1][0].transcript.trim().toLowerCase();
+      console.log("📝 Transcript:", transcript);
+
+      if (!micEnabled) return;
+
+      // Show visual feedback
+      updateFeedbackElement(true, transcript, true);
+
+      // Process the command
+      handleVoiceCommand(transcript);
+   };
+
+   recognition.onerror = (event) => {
+      console.error("❌ Recognition error:", event.error);
+      handleRecognitionError(event);
+   };
+
+   recognition.onend = () => {
+      console.log("🔚 Recognition ended");
+      handleRecognitionEnd();
+   };
+
+   // Start recognition with error handling
    try {
       recognition.start();
       recognition.running = true;
       restartCount = 0;
-      console.log("🎙️ Speech recognition started");
+      console.log("🎙️ Recognition started successfully");
       updateFeedbackElement(true, "Listening...");
    } catch (e) {
-      console.error("Failed to start recognition:", e);
+      console.error("❌ Failed to start recognition:", e);
       updateFeedbackElement(false, "Error starting");
    }
 }
@@ -226,125 +254,94 @@ function handleRecognitionEnd() {
 
 // Create visual feedback element
 function createFeedbackElement() {
-   // Check if element already exists
-   if (document.getElementById("voice-assistant-feedback")) {
-      feedbackElement = document.getElementById("voice-assistant-feedback");
-      return;
-   }
-
-   // Create new feedback element
    feedbackElement = document.createElement("div");
-   feedbackElement.id = "voice-assistant-feedback";
    feedbackElement.style.cssText = `
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      background-color: rgba(0, 0, 0, 0.7);
-      color: white;
-      padding: 10px 15px;
-      border-radius: 20px;
-      font-family: Arial, sans-serif;
-      font-size: 14px;
-      z-index: 9999;
-      display: none;
-      align-items: center;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-      transition: all 0.3s ease;
-      max-width: 300px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-   `;
-
-   // Add indicator dot
-   const indicator = document.createElement("div");
-   indicator.style.cssText = `
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background-color: #dc3545;
-      margin-right: 8px;
-      transition: background-color 0.3s ease;
-   `;
-   feedbackElement.appendChild(indicator);
-
-   // Add text container
-   const textContainer = document.createElement("span");
-   textContainer.textContent = "Voice Assistant";
-   feedbackElement.appendChild(textContainer);
-
-   // Add to document
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 10px 20px;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        border-radius: 20px;
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 14px;
+        z-index: 999999;
+        display: none;
+        transition: all 0.3s ease;
+    `;
    document.body.appendChild(feedbackElement);
-
-   // Show initial state
-   updateFeedbackElement(micEnabled, micEnabled ? "Listening..." : "Paused");
 }
 
-// Update visual feedback element
-function updateFeedbackElement(active, message, temporary = false) {
+function updateFeedbackElement(active, text, temporary = false) {
    if (!feedbackElement) return;
 
-   // Get the indicator and text elements
-   const indicator = feedbackElement.querySelector("div");
-   const textContainer = feedbackElement.querySelector("span");
+   feedbackElement.style.display = "block";
+   feedbackElement.style.background = active ? "rgba(52, 152, 219, 0.9)" : "rgba(231, 76, 60, 0.9)";
+   feedbackElement.textContent = text;
 
-   // Update indicator color
-   if (indicator) {
-      indicator.style.backgroundColor = active ? "#28a745" : "#dc3545";
-   }
-
-   // Update message
-   if (textContainer && message) {
-      textContainer.textContent = message;
-   }
-
-   // Show the element
-   feedbackElement.style.display = "flex";
-
-   // If temporary, hide after a delay
    if (temporary) {
       setTimeout(() => {
-         if (feedbackElement) {
-            textContainer.textContent = active ? "Listening..." : "Paused";
-         }
-      }, 3000);
+         feedbackElement.style.display = "none";
+      }, 2000);
    }
 }
 
 // =============== ✅ COMMAND HANDLER ===============
 async function handleVoiceCommand(cmd) {
+   console.log(`🎯 Processing command: "${cmd}"`);
+
+   // Normalize the command by removing extra spaces and converting to lowercase
+   cmd = cmd.toLowerCase().trim();
+
+      // Simplified bottom command matching - will now match "go bottom", "go to bottom", "scroll bottom", "scroll to bottom"
+      if (cmd.match(/^(go|scroll)( to)?( to)? bottom$/)) {
+         window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+         speak("Going to bottom");
+         return;
+      }
+
+      // Simplified top command matching - will now match "go top", "go to top", "scroll top", "scroll to top"
+      if (cmd.match(/^(go|scroll)( to)?( to)? top$/)) {
+         window.scrollTo({ top: 0, behavior: "smooth" });
+         speak("Going to top");
+         return;
+      }
+
+
    // First check for custom commands from storage
    const { commands = [] } = await chrome.storage.sync.get("commands");
-
-   // Log the command for debugging
-   console.log(`Processing command: "${cmd}"`);
+   console.log("📋 Available custom commands:", commands);
 
    // Check if it matches any custom command
    for (let c of commands) {
       if (cmd === c.trigger) {
-         console.log(`Matched custom command: ${c.trigger}`);
+         console.log(`✅ Matched custom command: ${c.trigger}`);
          const el = document.querySelector(c.target);
          if (el) {
-            if (c.action === "click") {
-               el.scrollIntoView({ behavior: "smooth", block: "center" });
-               el.click();
-               speak(`Clicked ${c.trigger}`);
-            } else if (c.action === "focus") {
-               el.scrollIntoView({ behavior: "smooth", block: "center" });
-               el.focus();
-               speak(`Focused on ${c.trigger}`);
-            } else if (c.action === "type") {
-               el.scrollIntoView({ behavior: "smooth", block: "center" });
-               el.value = c.value;
-               el.dispatchEvent(new Event("input", { bubbles: true }));
-               speak(`Typed text`);
-            }
+            console.log(`🎯 Found target element:`, el);
+            executeCommand(c, el);
             return;
          } else {
+            console.log(`❌ Target element not found for: ${c.target}`);
             speak(`Could not find element for ${c.trigger}`);
             return;
          }
       }
+   }
+
+   // Improved command matching
+   if (cmd.includes("click button")) {
+      const buttonText = cmd.replace("click button", "").trim();
+      console.log(`🔍 Looking for button with text: "${buttonText}"`);
+      clickButtonImproved(buttonText);
+   } else if (cmd.includes("click link")) {
+      const linkText = cmd.replace("click link", "").trim();
+      console.log(`🔍 Looking for link with text: "${linkText}"`);
+      clickLinkImproved(linkText);
+   } else if (cmd.includes("click")) {
+      const text = cmd.replace("click", "").trim();
+      console.log(`🔍 Looking for element with text: "${text}"`);
+      clickByTextImproved(text);
    }
 
    // Navigation commands
@@ -463,6 +460,28 @@ async function handleVoiceCommand(cmd) {
    else {
       speak("Sorry, I did not understand the command.");
       console.log(`Unrecognized command: ${cmd}`);
+   }
+}
+
+// Helper function to execute commands
+function executeCommand(command, element) {
+   switch (command.action) {
+      case "click":
+         element.scrollIntoView({ behavior: "smooth", block: "center" });
+         element.click();
+         speak(`Clicked ${command.trigger}`);
+         break;
+      case "focus":
+         element.scrollIntoView({ behavior: "smooth", block: "center" });
+         element.focus();
+         speak(`Focused on ${command.trigger}`);
+         break;
+      case "type":
+         element.scrollIntoView({ behavior: "smooth", block: "center" });
+         element.value = command.value;
+         element.dispatchEvent(new Event("input", { bubbles: true }));
+         speak(`Typed text`);
+         break;
    }
 }
 
@@ -750,4 +769,108 @@ function saveToClipboardHistory(text) {
       if (clipboardHistory.length > 5) clipboardHistory = clipboardHistory.slice(0, 5);
       chrome.storage.local.set({ clipboardHistory });
    });
+}
+
+// Improved click functions with better element matching
+function clickButtonImproved(text) {
+   // Convert text to lowercase for case-insensitive matching
+   const searchText = text.toLowerCase();
+
+   // Find all button-like elements
+   const elements = document.querySelectorAll(`
+        button,
+        [role="button"],
+        input[type="button"],
+        input[type="submit"],
+        .btn,
+        [class*="button"]
+    `);
+
+   console.log(`Found ${elements.length} potential button elements`);
+
+   for (let el of elements) {
+      // Get all text content from the element and its children
+      const elementText = (el.textContent || el.value || "").toLowerCase();
+      const ariaLabel = (el.getAttribute("aria-label") || "").toLowerCase();
+      const title = (el.getAttribute("title") || "").toLowerCase();
+
+      // Check if the element contains the search text in any of its attributes
+      if (elementText.includes(searchText) || ariaLabel.includes(searchText) || title.includes(searchText)) {
+         console.log(`✅ Found matching button:`, el);
+         el.scrollIntoView({ behavior: "smooth", block: "center" });
+         setTimeout(() => {
+            el.click();
+            speak(`Clicked ${text}`);
+         }, 500);
+         return true;
+      }
+   }
+
+   console.log(`❌ No button found with text: ${text}`);
+   speak(`Could not find button ${text}`);
+   return false;
+}
+
+function clickLinkImproved(text) {
+   const searchText = text.toLowerCase();
+   const links = document.querySelectorAll('a, [role="link"]');
+
+   console.log(`Found ${links.length} potential link elements`);
+
+   for (let link of links) {
+      const elementText = (link.textContent || "").toLowerCase();
+      const ariaLabel = (link.getAttribute("aria-label") || "").toLowerCase();
+      const title = (link.getAttribute("title") || "").toLowerCase();
+
+      if (elementText.includes(searchText) || ariaLabel.includes(searchText) || title.includes(searchText)) {
+         console.log(`✅ Found matching link:`, link);
+         link.scrollIntoView({ behavior: "smooth", block: "center" });
+         setTimeout(() => {
+            link.click();
+            speak(`Clicked ${text}`);
+         }, 500);
+         return true;
+      }
+   }
+
+   console.log(`❌ No link found with text: ${text}`);
+   speak(`Could not find link ${text}`);
+   return false;
+}
+
+function clickByTextImproved(text) {
+   const searchText = text.toLowerCase();
+   const elements = document.querySelectorAll("*");
+
+   for (let el of elements) {
+      // Skip hidden elements
+      if (el.offsetParent === null) continue;
+
+      const elementText = (el.textContent || "").toLowerCase();
+      const ariaLabel = (el.getAttribute("aria-label") || "").toLowerCase();
+      const title = (el.getAttribute("title") || "").toLowerCase();
+
+      if (elementText.includes(searchText) || ariaLabel.includes(searchText) || title.includes(searchText)) {
+         // Make sure it's clickable
+         if (
+            el.onclick ||
+            el.tagName === "BUTTON" ||
+            el.tagName === "A" ||
+            el.getAttribute("role") === "button" ||
+            el.getAttribute("role") === "link"
+         ) {
+            console.log(`✅ Found matching clickable element:`, el);
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
+            setTimeout(() => {
+               el.click();
+               speak(`Clicked ${text}`);
+            }, 500);
+            return true;
+         }
+      }
+   }
+
+   console.log(`❌ No clickable element found with text: ${text}`);
+   speak(`Could not find element ${text}`);
+   return false;
 }

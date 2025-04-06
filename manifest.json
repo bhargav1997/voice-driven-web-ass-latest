@@ -3,7 +3,7 @@
    "version": "1.0",
    "description": "Control any website using your voice.",
    "manifest_version": 3,
-   "permissions": ["storage", "activeTab", "scripting", "clipboardRead", "clipboardWrite"],
+   "permissions": ["storage", "activeTab", "scripting", "clipboardRead", "clipboardWrite", "tabs"],
    "host_permissions": ["<all_urls>"],
    "background": {
       "service_worker": "background.js"
