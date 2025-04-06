@@ -1,8 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
     <meta charset="UTF-8" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <title>VDWA – Command Builder</title>
     <style>
         :root {
@@ -90,7 +92,8 @@
 
         input[type="text"],
         select {
-            box-sizing: border-box; /* This ensures padding doesn't add to width */
+            box-sizing: border-box;
+            /* This ensures padding doesn't add to width */
             width: 100%;
             padding: 12px;
             border: 1px solid var(--border);
@@ -99,7 +102,8 @@
             color: var(--light);
             font-size: 14px;
             transition: all 0.2s ease;
-            max-width: 100%; /* Ensures input doesn't overflow */
+            max-width: 100%;
+            /* Ensures input doesn't overflow */
         }
 
         input[type="text"]:focus,
@@ -352,6 +356,26 @@
             z-index: 1;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
         }
+
+        /* High Contrast Mode Styles */
+        [data-theme="high-contrast"] {
+            --background: #000000;
+            --text: #FFFFFF;
+            --primary: #FFFF00;
+            --secondary: #00FFFF;
+            --border: #FFFFFF;
+        }
+
+        /* Accessibility Improvements */
+        *:focus {
+            outline: 3px solid var(--primary);
+            outline-offset: 2px;
+        }
+
+        /* Improved keyboard navigation indicators */
+        .keyboard-focus {
+            box-shadow: 0 0 0 3px var(--primary);
+        }
     </style>
 </head>
 
@@ -422,9 +446,464 @@
 
             <div id="defaultValues" class="command-list" style="margin-top: 24px;"></div>
         </div>
+
+        <div class="card">
+            <h2>Privacy & Data</h2>
+            <div class="privacy-controls">
+                <div class="form-group">
+                    <label for="dataRetention">Data Retention Period</label>
+                    <select id="dataRetention">
+                        <option value="7">7 days</option>
+                        <option value="30">30 days</option>
+                        <option value="90">90 days</option>
+                    </select>
+                </div>
+                <div class="button-group">
+                    <button id="clearHistory" class="danger">Clear Command History</button>
+                    <button id="clearSettings" class="danger">Reset All Settings</button>
+                    <button id="exportData" class="secondary">Export My Data</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card ai-settings-card">
+            <div class="card-header">
+                <h2>🤖 AI Assistant Settings</h2>
+                <span class="beta-badge">Beta</span>
+            </div>
+
+            <div class="form-group model-selector">
+                <label for="aiModel">AI Model</label>
+                <select id="aiModel" class="styled-select">
+                    <option value="gemini">Google Gemini</option>
+                </select>
+            </div>
+
+            <div class="form-group api-key-section">
+                <label for="apiKey">API Key</label>
+                <div class="api-key-input-group">
+                    <input 
+                        type="password" 
+                        id="apiKey" 
+                        placeholder="Enter your Gemini API key"
+                        class="styled-input"
+                    >
+                    <button id="toggleApiKey" class="icon-button" type="button" title="Toggle visibility">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </div>
+                <div class="api-key-help">
+                    <div class="info-icon">ℹ️</div>
+                    <div class="help-text">
+                        <p>To get your free API key:</p>
+                        <ol>
+                            <li>Visit <a href="https://makersuite.google.com/app/apikey" target="_blank">Google AI Studio</a></li>
+                            <li>Sign in with your Google account</li>
+                            <li>Click "Create API Key"</li>
+                            <li>Copy and paste the key here</li>
+                        </ol>
+                    </div>
+                </div>
+                <div id="apiKeyStatus" class="api-key-status"></div>
+                <div class="button-group">
+                    <button id="testApi" class="primary">Test Connection</button>
+                    <button id="saveSettings" class="primary">Save Settings</button>
+                </div>
+            </div>
+
+            <div class="settings-divider"></div>
+
+            <div class="voice-settings">
+                <h3>Voice Settings</h3>
+                <div class="form-group toggle-group">
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="autoRead">
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label">Auto-read AI responses</span>
+                    </label>
+                    <small class="setting-description">
+                        Automatically read responses aloud when received
+                    </small>
+                </div>
+            </div>
+
+            <div class="settings-divider"></div>
+
+            <div class="form-actions">
+                <button id="testApi" class="secondary-button">
+                    Test Connection
+                </button>
+                <button id="saveSettings" class="primary-button">
+                    Save Settings
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add onboarding overlay -->
+    <div id="onboarding" class="onboarding-overlay" style="display: none;">
+        <div class="onboarding-content">
+            <h2>Welcome to Voice-Driven Web Assistant! 👋</h2>
+            <div class="onboarding-steps">
+                <div class="step">
+                    <h3>1. Enable Microphone</h3>
+                    <p>Grant microphone access when prompted to use voice commands.</p>
+                </div>
+                <div class="step">
+                    <h3>2. Create Commands</h3>
+                    <p>Set up custom voice commands for common actions.</p>
+                </div>
+                <div class="step">
+                    <h3>3. Set Defaults</h3>
+                    <p>Configure default values for form fields.</p>
+                </div>
+            </div>
+            <button id="startTour" class="primary">Start Tour</button>
+        </div>
     </div>
 
     <script src="options.js"></script>
 </body>
 
 </html>
+<style>
+    .ai-settings-card {
+        background: var(--gray-800);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+
+    .card-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 24px;
+    }
+
+    .card-header h2 {
+        margin: 0;
+        color: var(--primary);
+        font-size: 24px;
+    }
+
+    .beta-badge {
+        background: var(--primary);
+        color: var(--dark);
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+
+    .model-selector {
+        margin-bottom: 24px;
+    }
+
+    .styled-select {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--gray-700);
+        color: var(--light);
+        font-size: 14px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .styled-select:hover {
+        border-color: var(--primary);
+    }
+
+    .api-key-section {
+        position: relative;
+        margin-bottom: 24px;
+    }
+
+    .api-key-input-group {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+
+    .styled-input {
+        flex: 1;
+        padding: 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--gray-700);
+        color: var(--light);
+        font-size: 14px;
+    }
+
+    .icon-button {
+        padding: 8px 12px;
+        background: var(--gray-700);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        cursor: pointer;
+        color: var(--light);
+    }
+
+    .button-group {
+        display: flex;
+        gap: 12px;
+        margin-top: 16px;
+    }
+
+    .api-key-status {
+        margin-top: 12px;
+        padding: 8px 12px;
+        border-radius: 6px;
+        display: none;
+    }
+
+    .api-key-status.visible {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .api-key-status.success {
+        background: rgba(76, 175, 80, 0.1);
+        color: #4CAF50;
+    }
+
+    .api-key-status.error {
+        background: rgba(244, 67, 54, 0.1);
+        color: #F44336;
+    }
+
+    .settings-divider {
+        height: 1px;
+        background: var(--border);
+        margin: 24px 0;
+    }
+
+    .voice-settings h3 {
+        color: var(--secondary);
+        font-size: 18px;
+        margin: 0 0 16px 0;
+    }
+
+    .toggle-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .toggle-switch {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        cursor: pointer;
+    }
+
+    .toggle-slider {
+        position: relative;
+        width: 44px;
+        height: 24px;
+        background: var(--gray-600);
+        border-radius: 12px;
+        transition: all 0.2s ease;
+    }
+
+    .toggle-slider:before {
+        content: '';
+        position: absolute;
+        width: 20px;
+        height: 20px;
+        left: 2px;
+        top: 2px;
+        background: white;
+        border-radius: 50%;
+        transition: all 0.2s ease;
+    }
+
+    input[type="checkbox"] {
+        display: none;
+    }
+
+    input[type="checkbox"]:checked+.toggle-slider {
+        background: var(--primary);
+    }
+
+    input[type="checkbox"]:checked+.toggle-slider:before {
+        transform: translateX(20px);
+    }
+
+    .setting-description {
+        color: var(--gray-400);
+        font-size: 13px;
+    }
+
+    .form-actions {
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+    }
+
+    .secondary-button,
+    .primary-button {
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .secondary-button {
+        background: var(--gray-700);
+        color: var(--light);
+        border: 1px solid var(--border);
+    }
+
+    .primary-button {
+        background: var(--primary);
+        color: white;
+        border: none;
+    }
+
+    .secondary-button:hover {
+        background: var(--gray-600);
+    }
+
+    .primary-button:hover {
+        background: #43A047;
+        transform: translateY(-1px);
+    }
+
+    @media (max-width: 768px) {
+        .ai-settings-card {
+            padding: 16px;
+        }
+
+        .form-actions {
+            flex-direction: column;
+        }
+
+        .secondary-button,
+        .primary-button {
+            width: 100%;
+        }
+    }
+</style>
+
+<script>
+    // Wait for DOM to be fully loaded
+    document.addEventListener('DOMContentLoaded', () => {
+        const apiKeyInput = document.getElementById('apiKey');
+        const toggleApiKey = document.getElementById('toggleApiKey');
+        const testApiButton = document.getElementById('testApi');
+        const saveSettingsButton = document.getElementById('saveSettings');
+        const apiKeyStatus = document.getElementById('apiKeyStatus');
+        const toggleIcon = toggleApiKey.querySelector('i');
+
+        // Load saved settings immediately
+        loadSavedSettings();
+
+        // Toggle API key visibility
+        toggleApiKey.addEventListener('click', () => {
+            if (apiKeyInput.type === 'password') {
+                apiKeyInput.type = 'text';
+                toggleIcon.className = 'fas fa-eye-slash';
+            } else {
+                apiKeyInput.type = 'password';
+                toggleIcon.className = 'fas fa-eye';
+            }
+        });
+
+        // Test API connection
+        testApiButton.addEventListener('click', async () => {
+            const apiKey = apiKeyInput.value.trim();
+
+            if (!apiKey) {
+                showStatus('error', 'Please enter an API key');
+                return;
+            }
+
+            testApiButton.disabled = true;
+            testApiButton.textContent = 'Testing...';
+            showStatus('', 'Testing connection...');
+
+            try {
+                await testGeminiAPI(apiKey);
+                showStatus('success', 'Connection successful!');
+            } catch (error) {
+                showStatus('error', 'Invalid API key or connection failed');
+            } finally {
+                testApiButton.disabled = false;
+                testApiButton.textContent = 'Test Connection';
+            }
+        });
+
+        // Save settings
+        saveSettingsButton.addEventListener('click', async () => {
+            const settings = {
+                apiKey: apiKeyInput.value.trim(),
+                autoRead: document.getElementById('autoRead')?.checked || false,
+                aiModel: document.getElementById('aiModel')?.value || 'gemini'
+            };
+
+            await chrome.storage.sync.set({ aiSettings: settings });
+            showStatus('success', 'Settings saved successfully!');
+
+            // Keep the success message visible for 3 seconds
+            setTimeout(() => {
+                apiKeyStatus.className = 'api-key-status';
+            }, 3000);
+        });
+
+        function showStatus(type, message) {
+            apiKeyStatus.className = `api-key-status visible ${type}`;
+            apiKeyStatus.innerHTML = `
+            <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i>
+            ${message}
+        `;
+        }
+
+        async function testGeminiAPI(apiKey) {
+            const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [{
+                            text: 'Hello'
+                        }]
+                    }]
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('API test failed');
+            }
+
+            return await response.json();
+        }
+
+        async function loadSavedSettings() {
+            const result = await chrome.storage.sync.get(['aiSettings']);
+            if (result.aiSettings) {
+                apiKeyInput.value = result.aiSettings.apiKey || '';
+
+                const autoReadElement = document.getElementById('autoRead');
+                if (autoReadElement) {
+                    autoReadElement.checked = result.aiSettings.autoRead || false;
+                }
+
+                const aiModelElement = document.getElementById('aiModel');
+                if (aiModelElement) {
+                    aiModelElement.value = result.aiSettings.aiModel || 'gemini';
+                }
+            }
+        }
+    });
+</script>

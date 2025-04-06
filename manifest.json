@@ -3,8 +3,18 @@
    "version": "1.0",
    "description": "Control any website using your voice.",
    "manifest_version": 3,
-   "permissions": ["storage", "activeTab", "scripting", "clipboardRead", "clipboardWrite", "tabs"],
-   "host_permissions": ["<all_urls>"],
+   "permissions": [
+      "storage",
+      "activeTab",
+      "scripting",
+      "clipboardRead",
+      "clipboardWrite",
+      "tabs"
+   ],
+   "host_permissions": [
+      "<all_urls>",
+      "https://generativelanguage.googleapis.com/"
+   ],
    "background": {
       "service_worker": "background.js"
    },
@@ -22,5 +32,13 @@
       "48": "icons/icon-48.png",
       "128": "icons/icon-128.png"
    },
-   "options_page": "options.html"
+   "options_page": "options.html",
+   "minimum_chrome_version": "92",
+   "offline_enabled": true,
+   "web_accessible_resources": [
+      {
+         "resources": ["icons/*", "sounds/*"],
+         "matches": ["<all_urls>"]
+      }
+   ]
 }

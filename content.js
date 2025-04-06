@@ -16,6 +16,286 @@ let settings = {
 // Visual feedback element
 let feedbackElement = null;
 
+// Add error tracking
+let errorLog = [];
+function logError(error, context) {
+    const errorEntry = {
+        timestamp: new Date().toISOString(),
+        error: error.message,
+        context,
+        stack: error.stack
+    };
+    errorLog.push(errorEntry);
+    if (errorLog.length > 100) errorLog.shift();
+    chrome.storage.local.set({ errorLog });
+}
+
+// Add command debouncing
+const debounce = (func, wait) => {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+};
+
+// Add command caching
+const commandCache = new Map();
+async function getCustomCommands() {
+    const cacheKey = 'customCommands';
+    if (commandCache.has(cacheKey)) {
+        return commandCache.get(cacheKey);
+    }
+    const { commands = [] } = await chrome.storage.sync.get('commands');
+    commandCache.set(cacheKey, commands);
+    return commands;
+}
+
+// Data sanitization utility
+const sanitizeInput = (input) => {
+    return DOMPurify.sanitize(input, {
+        ALLOWED_TAGS: [], // No HTML allowed
+        ALLOWED_ATTR: [] // No attributes allowed
+    });
+};
+
+// Rate limiting for voice commands
+const rateLimiter = {
+    commands: new Map(),
+    limit: 10, // Maximum commands per minute
+    interval: 60000, // 1 minute in milliseconds
+
+    checkLimit(command) {
+        const now = Date.now();
+        const commandHistory = this.commands.get(command) || [];
+        
+        // Remove old timestamps
+        const recentCommands = commandHistory.filter(
+            timestamp => now - timestamp < this.interval
+        );
+
+        if (recentCommands.length >= this.limit) {
+            return false; // Rate limit exceeded
+        }
+
+        // Add new timestamp
+        recentCommands.push(now);
+        this.commands.set(command, recentCommands);
+        return true;
+    }
+};
+
+// AI Assistant Integration
+const AI_COMMANDS = ['ask', 'question', 'explain', 'help me with'];
+const GEMINI_API_KEY = 'YOUR_GEMINI_API_KEY'; // Replace with your API key
+
+async function handleAIAssistant(command) {
+    try {
+        // Extract the actual question from the command
+        let question = '';
+        for (const trigger of AI_COMMANDS) {
+            if (command.startsWith(trigger)) {
+                question = command.slice(trigger.length).trim();
+                break;
+            }
+        }
+
+        if (!question) {
+            speak("What would you like to ask?");
+            return;
+        }
+
+        // Show loading indicator
+        updateFeedbackElement(true, "Thinking...");
+
+        // Call Gemini API
+        const response = await fetchAIResponse(question);
+        
+        // Create and show AI response overlay
+        showAIResponseOverlay(question, response);
+        
+        // Provide voice feedback
+        speak("I found an answer for you");
+
+    } catch (error) {
+        console.error("AI Assistant Error:", error);
+        speak("Sorry, I couldn't get an answer at this moment");
+        logError(error, 'AI Assistant');
+    }
+}
+
+async function fetchAIResponse(question) {
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${GEMINI_API_KEY}`
+        },
+        body: JSON.stringify({
+            contents: [{
+                parts: [{
+                    text: question
+                }]
+            }],
+            generationConfig: {
+                temperature: 0.7,
+                topK: 40,
+                topP: 0.95,
+                maxOutputTokens: 1024,
+            },
+            safetySettings: [
+                {
+                    category: "HARM_CATEGORY_HARASSMENT",
+                    threshold: "BLOCK_MEDIUM_AND_ABOVE"
+                },
+                {
+                    category: "HARM_CATEGORY_HATE_SPEECH",
+                    threshold: "BLOCK_MEDIUM_AND_ABOVE"
+                }
+            ]
+        })
+    });
+
+    const data = await response.json();
+    return data.candidates[0].content.parts[0].text;
+}
+
+function showAIResponseOverlay(question, response) {
+    // Remove existing overlay if present
+    const existingOverlay = document.getElementById("ai-response-overlay");
+    if (existingOverlay) {
+        document.body.removeChild(existingOverlay);
+    }
+
+    // Create overlay container
+    const overlay = document.createElement("div");
+    overlay.id = "ai-response-overlay";
+    overlay.innerHTML = `
+        <div class="ai-response-content">
+            <div class="ai-header">
+                <h2>AI Assistant</h2>
+                <button class="close-button" aria-label="Close">×</button>
+            </div>
+            <div class="ai-body">
+                <div class="question">
+                    <strong>Q:</strong> ${sanitizeInput(question)}
+                </div>
+                <div class="answer">
+                    <strong>A:</strong> ${sanitizeInput(response)}
+                </div>
+            </div>
+            <div class="ai-footer">
+                <button class="copy-button">Copy Answer</button>
+                <button class="read-aloud-button">Read Aloud</button>
+            </div>
+        </div>
+    `;
+
+    // Add styles
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 10000;
+    `;
+
+    // Add event listeners
+    const closeButton = overlay.querySelector(".close-button");
+    closeButton.onclick = () => document.body.removeChild(overlay);
+
+    const copyButton = overlay.querySelector(".copy-button");
+    copyButton.onclick = () => {
+        navigator.clipboard.writeText(response);
+        speak("Answer copied to clipboard");
+    };
+
+    const readAloudButton = overlay.querySelector(".read-aloud-button");
+    readAloudButton.onclick = () => speak(response);
+
+    // Add keyboard navigation
+    overlay.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+            document.body.removeChild(overlay);
+        }
+    });
+
+    document.body.appendChild(overlay);
+}
+
+// Add styles for AI response overlay
+const styles = `
+    .ai-response-content {
+        background: #ffffff;
+        border-radius: 12px;
+        max-width: 800px;
+        width: 90%;
+        max-height: 80vh;
+        overflow-y: auto;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+    }
+
+    .ai-header {
+        padding: 16px;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .ai-body {
+        padding: 24px;
+    }
+
+    .ai-footer {
+        padding: 16px;
+        border-top: 1px solid #eee;
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+    }
+
+    .question, .answer {
+        margin-bottom: 16px;
+        line-height: 1.6;
+    }
+
+    .close-button {
+        background: none;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        padding: 4px 8px;
+    }
+
+    .copy-button, .read-aloud-button {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 6px;
+        background: #007bff;
+        color: white;
+        cursor: pointer;
+    }
+
+    .copy-button:hover, .read-aloud-button:hover {
+        background: #0056b3;
+    }
+`;
+
+// Inject styles
+const styleSheet = document.createElement("style");
+styleSheet.textContent = styles;
+document.head.appendChild(styleSheet);
+
 // Initialize settings and mic state
 chrome.storage.local.get([micEnabledKey, "settings"], (result) => {
    micEnabled = result.micActive !== false;
@@ -288,203 +568,222 @@ function updateFeedbackElement(active, text, temporary = false) {
 }
 
 // =============== ✅ COMMAND HANDLER ===============
-async function handleVoiceCommand(cmd) {
-   if (DEBUG) console.log(`🎯 Processing command: "${cmd}"`);
+const handleVoiceCommand = debounce(async (cmd) => {
+    try {
+        cmd = sanitizeInput(cmd.toLowerCase().trim());
 
-   // Normalize the command
-   cmd = cmd.toLowerCase().trim();
+        // Check for AI assistant commands
+        if (AI_COMMANDS.some(trigger => cmd.startsWith(trigger))) {
+            await handleAIAssistant(cmd);
+            return;
+        }
 
-   try {
-      // Form navigation commands - handle these first
-      if (cmd === "next field") {
-         focusNextFormField();
-         return;
-      }
-      
-      if (cmd === "previous field") {
-         focusPreviousFormField();
-         return;
-      }
+        // Check rate limit
+        if (!rateLimiter.checkLimit(cmd)) {
+            speak("Please slow down. Too many commands.");
+            return;
+        }
 
-      // Try other form commands
-      const isFormCommand = await handleFormCommands(cmd);
-      if (isFormCommand) {
-         if (DEBUG) console.log("✅ Form command handled successfully");
-         return;
-      }
+        if (DEBUG) console.log(`🎯 Processing command: "${cmd}"`);
 
-      // Simplified bottom command matching - will now match "go bottom", "go to bottom", "scroll bottom", "scroll to bottom"
-      if (cmd.match(/^(go|scroll)( to)?( to)? bottom$/)) {
-         window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
-         speak("Going to bottom");
-         return;
-      }
+        // Normalize the command
+        cmd = cmd.toLowerCase().trim();
 
-      // Simplified top command matching - will now match "go top", "go to top", "scroll top", "scroll to top"
-      if (cmd.match(/^(go|scroll)( to)?( to)? top$/)) {
-         window.scrollTo({ top: 0, behavior: "smooth" });
-         speak("Going to top");
-         return;
-      }
-
-      // First check for custom commands from storage
-      const { commands = [] } = await chrome.storage.sync.get("commands");
-      console.log("📋 Available custom commands:", commands);
-
-      // Check if it matches any custom command
-      for (let c of commands) {
-         if (cmd === c.trigger) {
-            console.log(`✅ Matched custom command: ${c.trigger}`);
-            const el = document.querySelector(c.target);
-            if (el) {
-               console.log(`🎯 Found target element:`, el);
-               executeCommand(c, el);
-               return;
-            } else {
-               console.log(`❌ Target element not found for: ${c.target}`);
-               speak(`Could not find element for ${c.trigger}`);
-               return;
+        try {
+            // Form navigation commands - handle these first
+            if (cmd === "next field") {
+                focusNextFormField();
+                return;
             }
-         }
-      }
+            
+            if (cmd === "previous field") {
+                focusPreviousFormField();
+                return;
+            }
 
-      // Improved command matching
-      if (cmd.includes("click button")) {
-         const buttonText = cmd.replace("click button", "").trim();
-         console.log(`🔍 Looking for button with text: "${buttonText}"`);
-         clickButtonImproved(buttonText);
-      } else if (cmd.includes("click link")) {
-         const linkText = cmd.replace("click link", "").trim();
-         console.log(`🔍 Looking for link with text: "${linkText}"`);
-         clickLinkImproved(linkText);
-      } else if (cmd.includes("click")) {
-         const text = cmd.replace("click", "").trim();
-         console.log(`🔍 Looking for element with text: "${text}"`);
-         clickByTextImproved(text);
-      }
+            // Try other form commands
+            const isFormCommand = await handleFormCommands(cmd);
+            if (isFormCommand) {
+                if (DEBUG) console.log("✅ Form command handled successfully");
+                return;
+            }
 
-      // Navigation commands
-      if (cmd.includes("scroll down")) {
-         window.scrollBy({ top: 200, behavior: "smooth" });
-         speak("Scrolling down");
-      } else if (cmd.includes("scroll up")) {
-         window.scrollBy({ top: -200, behavior: "smooth" });
-         speak("Scrolling up");
-      } else if (cmd.includes("scroll right")) {
-         window.scrollBy({ left: 200, behavior: "smooth" });
-         speak("Scrolling right");
-      } else if (cmd.includes("scroll left")) {
-         window.scrollBy({ left: -200, behavior: "smooth" });
-         speak("Scrolling left");
-      } else if (cmd === "go back" || cmd === "go to previous page") {
-         speak("Going back");
-         history.back();
-      } else if (cmd === "go forward" || cmd === "go to next page") {
-         speak("Going forward");
-         history.forward();
-      } else if (cmd.includes("refresh") || cmd.includes("reload")) {
-         speak("Reloading page");
-         location.reload();
-      } else if (cmd === "go to top" || cmd === "scroll to top") {
-         window.scrollTo({ top: 0, behavior: "smooth" });
-         speak("Going to top");
-      } else if (cmd === "go to bottom" || cmd === "scroll to bottom") {
-         window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
-         speak("Going to bottom");
-      }
+            // Simplified bottom command matching - will now match "go bottom", "go to bottom", "scroll bottom", "scroll to bottom"
+            if (cmd.match(/^(go|scroll)( to)?( to)? bottom$/)) {
+                window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+                speak("Going to bottom");
+                return;
+            }
 
-      // Clipboard commands
-      else if (cmd === "copy" || cmd === "copy text") {
-         handleCopy();
-      } else if (cmd === "paste" || cmd === "paste text") {
-         handlePaste();
-      } else if (cmd === "select all" || cmd === "select everything") {
-         handleSelectAll();
-      } else if (cmd === "delete" || cmd === "clear" || cmd === "clear text") {
-         handleDelete();
-      }
+            // Simplified top command matching - will now match "go top", "go to top", "scroll top", "scroll to top"
+            if (cmd.match(/^(go|scroll)( to)?( to)? top$/)) {
+                window.scrollTo({ top: 0, behavior: "smooth" });
+                speak("Going to top");
+                return;
+            }
 
-      // Element interaction commands
-      else if (cmd.includes("click ")) {
-         const text = cmd.replace("click ", "");
-         speak(`Clicking ${text}`);
-         clickByText(text);
-      } else if (cmd.startsWith("click link ")) {
-         const text = cmd.replace("click link ", "");
-         speak(`Clicking link ${text}`);
-         clickBySelector("a", text);
-      } else if (cmd.startsWith("click button ")) {
-         const text = cmd.replace("click button ", "");
-         speak(`Clicking button ${text}`);
-         clickBySelector("button", text);
-      } else if (cmd.startsWith("focus on ") || cmd.startsWith("select field ")) {
-         const text = cmd.replace(/^(focus on |select field )/, "");
-         speak(`Focusing on ${text}`);
-         focusByPlaceholder(text);
-      } else if (cmd.startsWith("type ")) {
-         const text = cmd.replace("type ", "");
-         speak(`Typing ${text}`);
-         typeInFocusedElement(text);
-      } else if (cmd.startsWith("search for ") || cmd.startsWith("find ")) {
-         const query = cmd.replace(/^(search for |find )/, "");
-         speak(`Searching for ${query}`);
-         simulateSearch(query);
-      }
+            // First check for custom commands from storage
+            const { commands = [] } = await getCustomCommands();
+            console.log("📋 Available custom commands:", commands);
 
-      // Zoom commands
-      else if (cmd.includes("zoom in")) {
-         document.body.style.zoom = parseFloat(document.body.style.zoom || "1") * 1.1 + "";
-         speak("Zooming in");
-      } else if (cmd.includes("zoom out")) {
-         document.body.style.zoom = parseFloat(document.body.style.zoom || "1") * 0.9 + "";
-         speak("Zooming out");
-      } else if (cmd.includes("reset zoom") || cmd === "normal zoom") {
-         document.body.style.zoom = "100%";
-         speak("Zoom reset");
-      }
+            // Check if it matches any custom command
+            for (let c of commands) {
+                if (cmd === c.trigger) {
+                    console.log(`✅ Matched custom command: ${c.trigger}`);
+                    const el = document.querySelector(c.target);
+                    if (el) {
+                        console.log(`🎯 Found target element:`, el);
+                        executeCommand(c, el);
+                        return;
+                    } else {
+                        console.log(`❌ Target element not found for: ${c.target}`);
+                        speak(`Could not find element for ${c.trigger}`);
+                        return;
+                    }
+                }
+            }
 
-      // Tab commands
-      else if (cmd === "new tab") {
-         speak("Opening new tab");
-         chrome.runtime.sendMessage({ action: "openNewTab" });
-      } else if (cmd === "close tab") {
-         speak("Closing tab");
-         chrome.runtime.sendMessage({ action: "closeCurrentTab" });
-      } else if (cmd === "next tab") {
-         speak("Switching to next tab");
-         chrome.runtime.sendMessage({ action: "switchToNextTab" });
-      } else if (cmd === "previous tab") {
-         speak("Switching to previous tab");
-         chrome.runtime.sendMessage({ action: "switchToPreviousTab" });
-      }
+            // Improved command matching
+            if (cmd.includes("click button")) {
+                const buttonText = cmd.replace("click button", "").trim();
+                console.log(`🔍 Looking for button with text: "${buttonText}"`);
+                clickButtonImproved(buttonText);
+            } else if (cmd.includes("click link")) {
+                const linkText = cmd.replace("click link", "").trim();
+                console.log(`🔍 Looking for link with text: "${linkText}"`);
+                clickLinkImproved(linkText);
+            } else if (cmd.includes("click")) {
+                const text = cmd.replace("click", "").trim();
+                console.log(`🔍 Looking for element with text: "${text}"`);
+                clickByTextImproved(text);
+            }
 
-      // Form commands
-      else if (cmd === "submit form" || cmd === "submit") {
-         const form = document.querySelector("form");
-         if (form) {
-            speak("Submitting form");
-            form.submit();
-         } else {
-            speak("No form found");
-         }
-      }
+            // Navigation commands
+            if (cmd.includes("scroll down")) {
+                window.scrollBy({ top: 200, behavior: "smooth" });
+                speak("Scrolling down");
+            } else if (cmd.includes("scroll up")) {
+                window.scrollBy({ top: -200, behavior: "smooth" });
+                speak("Scrolling up");
+            } else if (cmd.includes("scroll right")) {
+                window.scrollBy({ left: 200, behavior: "smooth" });
+                speak("Scrolling right");
+            } else if (cmd.includes("scroll left")) {
+                window.scrollBy({ left: -200, behavior: "smooth" });
+                speak("Scrolling left");
+            } else if (cmd === "go back" || cmd === "go to previous page") {
+                speak("Going back");
+                history.back();
+            } else if (cmd === "go forward" || cmd === "go to next page") {
+                speak("Going forward");
+                history.forward();
+            } else if (cmd.includes("refresh") || cmd.includes("reload")) {
+                speak("Reloading page");
+                location.reload();
+            } else if (cmd === "go to top" || cmd === "scroll to top") {
+                window.scrollTo({ top: 0, behavior: "smooth" });
+                speak("Going to top");
+            } else if (cmd === "go to bottom" || cmd === "scroll to bottom") {
+                window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+                speak("Going to bottom");
+            }
 
-      // Help command
-      else if (cmd === "help" || cmd === "what can I say") {
-         showHelpOverlay();
-         speak("Showing available commands");
-      }
+            // Clipboard commands
+            else if (cmd === "copy" || cmd === "copy text") {
+                handleCopy();
+            } else if (cmd === "paste" || cmd === "paste text") {
+                handlePaste();
+            } else if (cmd === "select all" || cmd === "select everything") {
+                handleSelectAll();
+            } else if (cmd === "delete" || cmd === "clear" || cmd === "clear text") {
+                handleDelete();
+            }
 
-      // Unknown command
-      else {
-         speak("Sorry, I did not understand the command.");
-         console.log(`Unrecognized command: ${cmd}`);
-      }
-   } catch (error) {
-      console.error("❌ Error handling command:", error);
-      speak("Sorry, there was an error processing the command");
-   }
-}
+            // Element interaction commands
+            else if (cmd.includes("click ")) {
+                const text = cmd.replace("click ", "");
+                speak(`Clicking ${text}`);
+                clickByText(text);
+            } else if (cmd.startsWith("click link ")) {
+                const text = cmd.replace("click link ", "");
+                speak(`Clicking link ${text}`);
+                clickBySelector("a", text);
+            } else if (cmd.startsWith("click button ")) {
+                const text = cmd.replace("click button ", "");
+                speak(`Clicking button ${text}`);
+                clickBySelector("button", text);
+            } else if (cmd.startsWith("focus on ") || cmd.startsWith("select field ")) {
+                const text = cmd.replace(/^(focus on |select field )/, "");
+                speak(`Focusing on ${text}`);
+                focusByPlaceholder(text);
+            } else if (cmd.startsWith("type ")) {
+                const text = cmd.replace("type ", "");
+                speak(`Typing ${text}`);
+                typeInFocusedElement(text);
+            } else if (cmd.startsWith("search for ") || cmd.startsWith("find ")) {
+                const query = cmd.replace(/^(search for |find )/, "");
+                speak(`Searching for ${query}`);
+                simulateSearch(query);
+            }
+
+            // Zoom commands
+            else if (cmd.includes("zoom in")) {
+                document.body.style.zoom = parseFloat(document.body.style.zoom || "1") * 1.1 + "";
+                speak("Zooming in");
+            } else if (cmd.includes("zoom out")) {
+                document.body.style.zoom = parseFloat(document.body.style.zoom || "1") * 0.9 + "";
+                speak("Zooming out");
+            } else if (cmd.includes("reset zoom") || cmd === "normal zoom") {
+                document.body.style.zoom = "100%";
+                speak("Zoom reset");
+            }
+
+            // Tab commands
+            else if (cmd === "new tab") {
+                speak("Opening new tab");
+                chrome.runtime.sendMessage({ action: "openNewTab" });
+            } else if (cmd === "close tab") {
+                speak("Closing tab");
+                chrome.runtime.sendMessage({ action: "closeCurrentTab" });
+            } else if (cmd === "next tab") {
+                speak("Switching to next tab");
+                chrome.runtime.sendMessage({ action: "switchToNextTab" });
+            } else if (cmd === "previous tab") {
+                speak("Switching to previous tab");
+                chrome.runtime.sendMessage({ action: "switchToPreviousTab" });
+            }
+
+            // Form commands
+            else if (cmd === "submit form" || cmd === "submit") {
+                const form = document.querySelector("form");
+                if (form) {
+                    speak("Submitting form");
+                    form.submit();
+                } else {
+                    speak("No form found");
+                }
+            }
+
+            // Help command
+            else if (cmd === "help" || cmd === "what can I say") {
+                showHelpOverlay();
+                speak("Showing available commands");
+            }
+
+            // Unknown command
+            else {
+                speak("Sorry, I did not understand the command.");
+                console.log(`Unrecognized command: ${cmd}`);
+            }
+        } catch (error) {
+            console.error("❌ Error handling command:", error);
+            speak("Sorry, there was an error processing the command");
+        }
+    } catch (error) {
+        logError(error, 'Command Processing');
+        speak("An error occurred while processing the command");
+    }
+}, 300);
 
 // Helper function to execute commands
 function executeCommand(command, element) {
@@ -1187,4 +1486,38 @@ function getFieldIdentifier(element) {
    
    if (DEBUG) console.log(`📝 Field identifier for element:`, identifier);
    return identifier;
+}
+
+// Accessibility enhancements
+function initAccessibility() {
+    // Add ARIA labels to dynamic elements
+    feedbackElement.setAttribute('role', 'status');
+    feedbackElement.setAttribute('aria-live', 'polite');
+
+    // Add keyboard navigation for help overlay
+    const helpOverlay = document.getElementById('voice-assistant-help');
+    if (helpOverlay) {
+        helpOverlay.setAttribute('role', 'dialog');
+        helpOverlay.setAttribute('aria-labelledby', 'help-title');
+        
+        // Trap focus within overlay when open
+        const focusableElements = helpOverlay.querySelectorAll(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        
+        const firstFocusable = focusableElements[0];
+        const lastFocusable = focusableElements[focusableElements.length - 1];
+
+        helpOverlay.addEventListener('keydown', (e) => {
+            if (e.key === 'Tab') {
+                if (e.shiftKey && document.activeElement === firstFocusable) {
+                    lastFocusable.focus();
+                    e.preventDefault();
+                } else if (!e.shiftKey && document.activeElement === lastFocusable) {
+                    firstFocusable.focus();
+                    e.preventDefault();
+                }
+            }
+        });
+    }
 }

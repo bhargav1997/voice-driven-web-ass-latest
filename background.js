@@ -83,6 +83,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
    }
 });
 
+// Add command history tracking
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+   if (message.action === "logCommand") {
+      chrome.storage.local.get(['commandHistory'], (result) => {
+         const history = result.commandHistory || [];
+         history.unshift({
+            command: message.command,
+            timestamp: new Date().toISOString(),
+            url: sender.tab?.url
+         });
+         if (history.length > 50) history.pop();
+         chrome.storage.local.set({ commandHistory: history });
+      });
+   }
+});
+
 // Handle tab updates to reinject content script if needed
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
    if (changeInfo.status === "complete" && tab.url && tab.url.startsWith("http")) {
