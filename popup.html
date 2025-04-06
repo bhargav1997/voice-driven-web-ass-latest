@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Voice Web Assistant</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 16px;
+            font-family: 'Segoe UI', sans-serif;
+            background: #f4f7fa;
+            width: 320px;
+            color: #222;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .mic-icon {
+            width: 24px;
+            height: 24px;
+        }
+
+        .status-pill {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: white;
+            display: inline-block;
+        }
+
+        .pill-on {
+            background-color: #28a745;
+        }
+
+        .pill-off {
+            background-color: #dc3545;
+        }
+
+        .section {
+            margin-top: 12px;
+            background: white;
+            padding: 14px;
+            border-radius: 12px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+        }
+
+        .section h4 {
+            margin: 0 0 8px;
+            font-size: 14px;
+            color: #555;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .command-text {
+            font-size: 14px;
+            color: #111;
+            font-weight: bold;
+            word-wrap: break-word;
+        }
+
+        .command-history {
+            max-height: 100px;
+            overflow-y: auto;
+            margin-top: 8px;
+        }
+
+        .history-item {
+            padding: 6px 0;
+            border-bottom: 1px solid #eee;
+            font-size: 12px;
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
+        }
+
+        button {
+            margin-top: 12px;
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+            transition: all 0.3s ease;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .link-btn {
+            background-color: #6c757d;
+        }
+
+        .link-btn:hover {
+            background-color: #495057;
+        }
+
+        .help-btn {
+            background-color: #17a2b8;
+        }
+
+        .help-btn:hover {
+            background-color: #138496;
+        }
+
+        .settings-section {
+            margin-top: 16px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .setting-toggle {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 36px;
+            height: 20px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked+.toggle-slider {
+            background-color: #2196F3;
+        }
+
+        input:checked+.toggle-slider:before {
+            transform: translateX(16px);
+        }
+
+        .button-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .button-row button {
+            flex: 1;
+        }
+
+        .language-select {
+            width: 100%;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+            margin-top: 8px;
+            background-color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <img src="./icons/icon-48.png" class="mic-icon" alt="Mic Icon" />
+        <div>
+            <div><strong>Voice Web Assistant</strong></div>
+            <div id="status" class="status-pill pill-off">
+                <span class="status-dot"></span>
+                <span>Stopped</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h4>
+            <span>Last Command</span>
+            <small id="commandTime"></small>
+        </h4>
+        <div class="command-text" id="lastCmd">None</div>
+    </div>
+
+    <div class="section">
+        <h4>Quick Settings</h4>
+        <div class="settings-section">
+            <div class="setting-toggle">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="voiceFeedback" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+                <span>Voice Feedback</span>
+            </div>
+
+            <div class="setting-toggle">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="autoRestart" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+                <span>Auto Restart</span>
+            </div>
+        </div>
+
+        <div style="margin-top: 10px;">
+            <label for="language" style="font-size: 13px;">Recognition Language:</label>
+            <select id="language" class="language-select">
+                <option value="en-US">English (US)</option>
+                <option value="en-GB">English (UK)</option>
+                <option value="es-ES">Spanish</option>
+                <option value="fr-FR">French</option>
+                <option value="de-DE">German</option>
+                <option value="it-IT">Italian</option>
+                <option value="ja-JP">Japanese</option>
+                <option value="ko-KR">Korean</option>
+                <option value="zh-CN">Chinese (Simplified)</option>
+                <option value="ru-RU">Russian</option>
+                <option value="pt-BR">Portuguese (Brazil)</option>
+                <option value="hi-IN">Hindi</option>
+            </select>
+        </div>
+    </div>
+
+    <button id="toggleBtn">
+        <span class="status-dot"></span>
+        <span>Start Listening</span>
+    </button>
+
+    <div class="button-row">
+        <button class="help-btn" id="showHelp">Show Commands</button>
+        <button class="link-btn" id="openOptions">Command Builder</button>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>
