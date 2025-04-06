@@ -1,5 +1,6 @@
 const micEnabledKey = "micActive";
 const SPEECH_RECOGNITION_ENABLED = true;
+const DEBUG = true;
 
 let micEnabled = true;
 let restartCount = 0;
@@ -288,10 +289,29 @@ function updateFeedbackElement(active, text, temporary = false) {
 
 // =============== ✅ COMMAND HANDLER ===============
 async function handleVoiceCommand(cmd) {
-   console.log(`🎯 Processing command: "${cmd}"`);
+   if (DEBUG) console.log(`🎯 Processing command: "${cmd}"`);
 
-   // Normalize the command by removing extra spaces and converting to lowercase
+   // Normalize the command
    cmd = cmd.toLowerCase().trim();
+
+   try {
+      // Form navigation commands - handle these first
+      if (cmd === "next field") {
+         focusNextFormField();
+         return;
+      }
+      
+      if (cmd === "previous field") {
+         focusPreviousFormField();
+         return;
+      }
+
+      // Try other form commands
+      const isFormCommand = await handleFormCommands(cmd);
+      if (isFormCommand) {
+         if (DEBUG) console.log("✅ Form command handled successfully");
+         return;
+      }
 
       // Simplified bottom command matching - will now match "go bottom", "go to bottom", "scroll bottom", "scroll to bottom"
       if (cmd.match(/^(go|scroll)( to)?( to)? bottom$/)) {
@@ -307,159 +327,162 @@ async function handleVoiceCommand(cmd) {
          return;
       }
 
+      // First check for custom commands from storage
+      const { commands = [] } = await chrome.storage.sync.get("commands");
+      console.log("📋 Available custom commands:", commands);
 
-   // First check for custom commands from storage
-   const { commands = [] } = await chrome.storage.sync.get("commands");
-   console.log("📋 Available custom commands:", commands);
-
-   // Check if it matches any custom command
-   for (let c of commands) {
-      if (cmd === c.trigger) {
-         console.log(`✅ Matched custom command: ${c.trigger}`);
-         const el = document.querySelector(c.target);
-         if (el) {
-            console.log(`🎯 Found target element:`, el);
-            executeCommand(c, el);
-            return;
-         } else {
-            console.log(`❌ Target element not found for: ${c.target}`);
-            speak(`Could not find element for ${c.trigger}`);
-            return;
+      // Check if it matches any custom command
+      for (let c of commands) {
+         if (cmd === c.trigger) {
+            console.log(`✅ Matched custom command: ${c.trigger}`);
+            const el = document.querySelector(c.target);
+            if (el) {
+               console.log(`🎯 Found target element:`, el);
+               executeCommand(c, el);
+               return;
+            } else {
+               console.log(`❌ Target element not found for: ${c.target}`);
+               speak(`Could not find element for ${c.trigger}`);
+               return;
+            }
          }
       }
-   }
 
-   // Improved command matching
-   if (cmd.includes("click button")) {
-      const buttonText = cmd.replace("click button", "").trim();
-      console.log(`🔍 Looking for button with text: "${buttonText}"`);
-      clickButtonImproved(buttonText);
-   } else if (cmd.includes("click link")) {
-      const linkText = cmd.replace("click link", "").trim();
-      console.log(`🔍 Looking for link with text: "${linkText}"`);
-      clickLinkImproved(linkText);
-   } else if (cmd.includes("click")) {
-      const text = cmd.replace("click", "").trim();
-      console.log(`🔍 Looking for element with text: "${text}"`);
-      clickByTextImproved(text);
-   }
-
-   // Navigation commands
-   if (cmd.includes("scroll down")) {
-      window.scrollBy({ top: 200, behavior: "smooth" });
-      speak("Scrolling down");
-   } else if (cmd.includes("scroll up")) {
-      window.scrollBy({ top: -200, behavior: "smooth" });
-      speak("Scrolling up");
-   } else if (cmd.includes("scroll right")) {
-      window.scrollBy({ left: 200, behavior: "smooth" });
-      speak("Scrolling right");
-   } else if (cmd.includes("scroll left")) {
-      window.scrollBy({ left: -200, behavior: "smooth" });
-      speak("Scrolling left");
-   } else if (cmd === "go back" || cmd === "go to previous page") {
-      speak("Going back");
-      history.back();
-   } else if (cmd === "go forward" || cmd === "go to next page") {
-      speak("Going forward");
-      history.forward();
-   } else if (cmd.includes("refresh") || cmd.includes("reload")) {
-      speak("Reloading page");
-      location.reload();
-   } else if (cmd === "go to top" || cmd === "scroll to top") {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      speak("Going to top");
-   } else if (cmd === "go to bottom" || cmd === "scroll to bottom") {
-      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
-      speak("Going to bottom");
-   }
-
-   // Clipboard commands
-   else if (cmd === "copy" || cmd === "copy text") {
-      handleCopy();
-   } else if (cmd === "paste" || cmd === "paste text") {
-      handlePaste();
-   } else if (cmd === "select all" || cmd === "select everything") {
-      handleSelectAll();
-   } else if (cmd === "delete" || cmd === "clear" || cmd === "clear text") {
-      handleDelete();
-   }
-
-   // Element interaction commands
-   else if (cmd.includes("click ")) {
-      const text = cmd.replace("click ", "");
-      speak(`Clicking ${text}`);
-      clickByText(text);
-   } else if (cmd.startsWith("click link ")) {
-      const text = cmd.replace("click link ", "");
-      speak(`Clicking link ${text}`);
-      clickBySelector("a", text);
-   } else if (cmd.startsWith("click button ")) {
-      const text = cmd.replace("click button ", "");
-      speak(`Clicking button ${text}`);
-      clickBySelector("button", text);
-   } else if (cmd.startsWith("focus on ") || cmd.startsWith("select field ")) {
-      const text = cmd.replace(/^(focus on |select field )/, "");
-      speak(`Focusing on ${text}`);
-      focusByPlaceholder(text);
-   } else if (cmd.startsWith("type ")) {
-      const text = cmd.replace("type ", "");
-      speak(`Typing ${text}`);
-      typeInFocusedElement(text);
-   } else if (cmd.startsWith("search for ") || cmd.startsWith("find ")) {
-      const query = cmd.replace(/^(search for |find )/, "");
-      speak(`Searching for ${query}`);
-      simulateSearch(query);
-   }
-
-   // Zoom commands
-   else if (cmd.includes("zoom in")) {
-      document.body.style.zoom = parseFloat(document.body.style.zoom || "1") * 1.1 + "";
-      speak("Zooming in");
-   } else if (cmd.includes("zoom out")) {
-      document.body.style.zoom = parseFloat(document.body.style.zoom || "1") * 0.9 + "";
-      speak("Zooming out");
-   } else if (cmd.includes("reset zoom") || cmd === "normal zoom") {
-      document.body.style.zoom = "100%";
-      speak("Zoom reset");
-   }
-
-   // Tab commands
-   else if (cmd === "new tab") {
-      speak("Opening new tab");
-      chrome.runtime.sendMessage({ action: "openNewTab" });
-   } else if (cmd === "close tab") {
-      speak("Closing tab");
-      chrome.runtime.sendMessage({ action: "closeCurrentTab" });
-   } else if (cmd === "next tab") {
-      speak("Switching to next tab");
-      chrome.runtime.sendMessage({ action: "switchToNextTab" });
-   } else if (cmd === "previous tab") {
-      speak("Switching to previous tab");
-      chrome.runtime.sendMessage({ action: "switchToPreviousTab" });
-   }
-
-   // Form commands
-   else if (cmd === "submit form" || cmd === "submit") {
-      const form = document.querySelector("form");
-      if (form) {
-         speak("Submitting form");
-         form.submit();
-      } else {
-         speak("No form found");
+      // Improved command matching
+      if (cmd.includes("click button")) {
+         const buttonText = cmd.replace("click button", "").trim();
+         console.log(`🔍 Looking for button with text: "${buttonText}"`);
+         clickButtonImproved(buttonText);
+      } else if (cmd.includes("click link")) {
+         const linkText = cmd.replace("click link", "").trim();
+         console.log(`🔍 Looking for link with text: "${linkText}"`);
+         clickLinkImproved(linkText);
+      } else if (cmd.includes("click")) {
+         const text = cmd.replace("click", "").trim();
+         console.log(`🔍 Looking for element with text: "${text}"`);
+         clickByTextImproved(text);
       }
-   }
 
-   // Help command
-   else if (cmd === "help" || cmd === "what can I say") {
-      showHelpOverlay();
-      speak("Showing available commands");
-   }
+      // Navigation commands
+      if (cmd.includes("scroll down")) {
+         window.scrollBy({ top: 200, behavior: "smooth" });
+         speak("Scrolling down");
+      } else if (cmd.includes("scroll up")) {
+         window.scrollBy({ top: -200, behavior: "smooth" });
+         speak("Scrolling up");
+      } else if (cmd.includes("scroll right")) {
+         window.scrollBy({ left: 200, behavior: "smooth" });
+         speak("Scrolling right");
+      } else if (cmd.includes("scroll left")) {
+         window.scrollBy({ left: -200, behavior: "smooth" });
+         speak("Scrolling left");
+      } else if (cmd === "go back" || cmd === "go to previous page") {
+         speak("Going back");
+         history.back();
+      } else if (cmd === "go forward" || cmd === "go to next page") {
+         speak("Going forward");
+         history.forward();
+      } else if (cmd.includes("refresh") || cmd.includes("reload")) {
+         speak("Reloading page");
+         location.reload();
+      } else if (cmd === "go to top" || cmd === "scroll to top") {
+         window.scrollTo({ top: 0, behavior: "smooth" });
+         speak("Going to top");
+      } else if (cmd === "go to bottom" || cmd === "scroll to bottom") {
+         window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+         speak("Going to bottom");
+      }
 
-   // Unknown command
-   else {
-      speak("Sorry, I did not understand the command.");
-      console.log(`Unrecognized command: ${cmd}`);
+      // Clipboard commands
+      else if (cmd === "copy" || cmd === "copy text") {
+         handleCopy();
+      } else if (cmd === "paste" || cmd === "paste text") {
+         handlePaste();
+      } else if (cmd === "select all" || cmd === "select everything") {
+         handleSelectAll();
+      } else if (cmd === "delete" || cmd === "clear" || cmd === "clear text") {
+         handleDelete();
+      }
+
+      // Element interaction commands
+      else if (cmd.includes("click ")) {
+         const text = cmd.replace("click ", "");
+         speak(`Clicking ${text}`);
+         clickByText(text);
+      } else if (cmd.startsWith("click link ")) {
+         const text = cmd.replace("click link ", "");
+         speak(`Clicking link ${text}`);
+         clickBySelector("a", text);
+      } else if (cmd.startsWith("click button ")) {
+         const text = cmd.replace("click button ", "");
+         speak(`Clicking button ${text}`);
+         clickBySelector("button", text);
+      } else if (cmd.startsWith("focus on ") || cmd.startsWith("select field ")) {
+         const text = cmd.replace(/^(focus on |select field )/, "");
+         speak(`Focusing on ${text}`);
+         focusByPlaceholder(text);
+      } else if (cmd.startsWith("type ")) {
+         const text = cmd.replace("type ", "");
+         speak(`Typing ${text}`);
+         typeInFocusedElement(text);
+      } else if (cmd.startsWith("search for ") || cmd.startsWith("find ")) {
+         const query = cmd.replace(/^(search for |find )/, "");
+         speak(`Searching for ${query}`);
+         simulateSearch(query);
+      }
+
+      // Zoom commands
+      else if (cmd.includes("zoom in")) {
+         document.body.style.zoom = parseFloat(document.body.style.zoom || "1") * 1.1 + "";
+         speak("Zooming in");
+      } else if (cmd.includes("zoom out")) {
+         document.body.style.zoom = parseFloat(document.body.style.zoom || "1") * 0.9 + "";
+         speak("Zooming out");
+      } else if (cmd.includes("reset zoom") || cmd === "normal zoom") {
+         document.body.style.zoom = "100%";
+         speak("Zoom reset");
+      }
+
+      // Tab commands
+      else if (cmd === "new tab") {
+         speak("Opening new tab");
+         chrome.runtime.sendMessage({ action: "openNewTab" });
+      } else if (cmd === "close tab") {
+         speak("Closing tab");
+         chrome.runtime.sendMessage({ action: "closeCurrentTab" });
+      } else if (cmd === "next tab") {
+         speak("Switching to next tab");
+         chrome.runtime.sendMessage({ action: "switchToNextTab" });
+      } else if (cmd === "previous tab") {
+         speak("Switching to previous tab");
+         chrome.runtime.sendMessage({ action: "switchToPreviousTab" });
+      }
+
+      // Form commands
+      else if (cmd === "submit form" || cmd === "submit") {
+         const form = document.querySelector("form");
+         if (form) {
+            speak("Submitting form");
+            form.submit();
+         } else {
+            speak("No form found");
+         }
+      }
+
+      // Help command
+      else if (cmd === "help" || cmd === "what can I say") {
+         showHelpOverlay();
+         speak("Showing available commands");
+      }
+
+      // Unknown command
+      else {
+         speak("Sorry, I did not understand the command.");
+         console.log(`Unrecognized command: ${cmd}`);
+      }
+   } catch (error) {
+      console.error("❌ Error handling command:", error);
+      speak("Sorry, there was an error processing the command");
    }
 }
 
@@ -494,7 +517,7 @@ function showHelpOverlay() {
       return;
    }
 
-   // Create help overlay
+   // Create help overlay container
    const overlay = document.createElement("div");
    overlay.id = "voice-assistant-help";
    overlay.style.cssText = `
@@ -502,32 +525,49 @@ function showHelpOverlay() {
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      background-color: rgba(0, 0, 0, 0.9);
-      color: white;
-      padding: 20px;
-      border-radius: 10px;
+      background-color: #1a1a1a;
+      color: #ffffff;
+      padding: 32px;
+      border-radius: 16px;
       z-index: 10000;
-      max-width: 80%;
-      max-height: 80%;
+      width: 600px;
+      max-width: 90%;
+      max-height: 85vh;
       overflow-y: auto;
-      box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
-      font-family: Arial, sans-serif;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      line-height: 1.6;
+      border: 1px solid rgba(255, 255, 255, 0.1);
    `;
 
    // Add close button
    const closeButton = document.createElement("button");
-   closeButton.textContent = "Close";
+   closeButton.textContent = "×";
    closeButton.style.cssText = `
       position: absolute;
-      top: 10px;
-      right: 10px;
-      background-color: #f44336;
+      top: 16px;
+      right: 16px;
+      background-color: rgba(255, 255, 255, 0.1);
       color: white;
       border: none;
-      border-radius: 5px;
-      padding: 5px 10px;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      font-size: 24px;
       cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      padding: 0;
+      line-height: 1;
    `;
+   closeButton.onmouseover = () => {
+      closeButton.style.backgroundColor = "rgba(255, 255, 255, 0.2)";
+   };
+   closeButton.onmouseout = () => {
+      closeButton.style.backgroundColor = "rgba(255, 255, 255, 0.1)";
+   };
    closeButton.onclick = () => document.body.removeChild(overlay);
    overlay.appendChild(closeButton);
 
@@ -535,93 +575,133 @@ function showHelpOverlay() {
    const title = document.createElement("h2");
    title.textContent = "Voice Assistant Commands";
    title.style.cssText = `
-      margin-top: 0;
+      margin: 10px 0 24px 0;
       color: #4CAF50;
-      border-bottom: 1px solid #4CAF50;
-      padding-bottom: 10px;
+      font-size: 24px;
+      font-weight: 600;
+      border-bottom: 2px solid #4CAF50;
+      padding-bottom: 16px;
    `;
    overlay.appendChild(title);
 
-   // Add command categories
-   const categories = [
+   // Add command sections
+   const sections = [
       {
-         name: "Navigation",
+         title: "Navigation Commands",
          commands: [
-            "scroll down/up/left/right",
-            "go back/forward",
-            "refresh/reload",
-            "go to top/bottom",
-            "new tab",
-            "close tab",
-            "next tab",
-            "previous tab",
-         ],
+            { command: "Go to top", description: "Scroll to the top of the page" },
+            { command: "Go to bottom", description: "Scroll to the bottom of the page" },
+            { command: "Scroll up/down", description: "Scroll the page up or down" },
+         ]
       },
       {
-         name: "Interaction",
+         title: "Form Commands",
          commands: [
-            "click [text]",
-            "click link [text]",
-            "click button [text]",
-            "focus on [field]",
-            "type [text]",
-            "search for [query]",
-            "submit form",
-         ],
+            { command: "Next field", description: "Move to the next form field" },
+            { command: "Previous field", description: "Move to the previous form field" },
+            { command: "Fill [field] with [value]", description: "Fill a specific form field" },
+            { command: "Fill [field]", description: "Fill a field with default value" },
+         ]
       },
       {
-         name: "Text & Clipboard",
-         commands: ["copy", "paste", "select all", "delete/clear"],
+         title: "Click Commands",
+         commands: [
+            { command: "Click [text]", description: "Click element containing the text" },
+            { command: "Click button [text]", description: "Click button with specific text" },
+            { command: "Click link [text]", description: "Click link with specific text" },
+         ]
       },
       {
-         name: "View",
-         commands: ["zoom in", "zoom out", "reset zoom"],
-      },
-      {
-         name: "Help",
-         commands: ["help", "what can I say"],
-      },
+         title: "Text Commands",
+         commands: [
+            { command: "Copy", description: "Copy selected text" },
+            { command: "Paste", description: "Paste text at cursor position" },
+            { command: "Select all", description: "Select all text" },
+            { command: "Delete", description: "Delete text in current field" },
+         ]
+      }
    ];
 
-   // Add categories to overlay
-   categories.forEach((category) => {
-      const section = document.createElement("div");
-      section.style.marginBottom = "15px";
-
-      const heading = document.createElement("h3");
-      heading.textContent = category.name;
-      heading.style.cssText = `
-         margin: 10px 0 5px 0;
-         color: #2196F3;
+   sections.forEach(section => {
+      const sectionEl = document.createElement("div");
+      sectionEl.style.cssText = `
+         margin-bottom: 24px;
+         background: rgba(255, 255, 255, 0.05);
+         border-radius: 12px;
+         padding: 20px;
       `;
-      section.appendChild(heading);
 
-      const commandList = document.createElement("ul");
+      const sectionTitle = document.createElement("h3");
+      sectionTitle.textContent = section.title;
+      sectionTitle.style.cssText = `
+         margin: 0 0 16px 0;
+         color: #64B5F6;
+         font-size: 18px;
+         font-weight: 500;
+      `;
+      sectionEl.appendChild(sectionTitle);
+
+      const commandList = document.createElement("div");
       commandList.style.cssText = `
-         margin: 5px 0;
-         padding-left: 20px;
+         display: grid;
+         gap: 12px;
       `;
 
-      category.commands.forEach((cmd) => {
-         const item = document.createElement("li");
-         item.textContent = cmd;
-         item.style.margin = "5px 0";
-         commandList.appendChild(item);
+      section.commands.forEach(cmd => {
+         const cmdEl = document.createElement("div");
+         cmdEl.style.cssText = `
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 16px;
+            align-items: center;
+            padding: 8px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.03);
+            transition: background 0.2s ease;
+         `;
+         cmdEl.onmouseover = () => {
+            cmdEl.style.background = "rgba(255, 255, 255, 0.07)";
+         };
+         cmdEl.onmouseout = () => {
+            cmdEl.style.background = "rgba(255, 255, 255, 0.03)";
+         };
+
+         const cmdName = document.createElement("code");
+         cmdName.textContent = cmd.command;
+         cmdName.style.cssText = `
+            color: #FF9800;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            padding: 4px 8px;
+            background: rgba(255, 152, 0, 0.1);
+            border-radius: 4px;
+         `;
+
+         const cmdDesc = document.createElement("div");
+         cmdDesc.textContent = cmd.description;
+         cmdDesc.style.cssText = `
+            color: #CCC;
+            font-size: 14px;
+         `;
+
+         cmdEl.appendChild(cmdName);
+         cmdEl.appendChild(cmdDesc);
+         commandList.appendChild(cmdEl);
       });
 
-      section.appendChild(commandList);
-      overlay.appendChild(section);
+      sectionEl.appendChild(commandList);
+      overlay.appendChild(sectionEl);
    });
 
    // Add to document
    document.body.appendChild(overlay);
 
-   // Auto-close after 15 seconds
+   // Auto-close after 30 seconds
    setTimeout(() => {
       if (document.body.contains(overlay)) {
          document.body.removeChild(overlay);
       }
-   }, 15000);
+   }, 30000);
 }
 
 // =============== ✅ HELPERS ===============
@@ -873,4 +953,238 @@ function clickByTextImproved(text) {
    console.log(`❌ No clickable element found with text: ${text}`);
    speak(`Could not find element ${text}`);
    return false;
+}
+
+// Advanced form handling functions
+async function handleFormCommands(cmd) {
+    if (DEBUG) console.log("🔍 Form command handler started for:", cmd);
+
+    // Check for "fill [fieldname]" without "with" clause
+    const fillDefaultMatch = cmd.match(/^fill (.+)$/);
+    if (fillDefaultMatch && !cmd.includes(' with ')) {
+        const fieldIdentifier = fillDefaultMatch[1].trim();
+        if (DEBUG) console.log("📝 Attempting to fill with default value for:", fieldIdentifier);
+        
+        // Try to find the field first
+        const field = findFormField(fieldIdentifier);
+        
+        if (field) {
+            if (DEBUG) console.log("✅ Field found:", field);
+            // For testing, let's use a default value
+            const defaultValue = "test@example.com"; // You can modify this
+            await fillFormField(fieldIdentifier, defaultValue);
+            return true;
+        } else {
+            if (DEBUG) console.log("❌ Field not found for:", fieldIdentifier);
+            speak(`Could not find field ${fieldIdentifier}`);
+            return true; // Still return true to prevent "unrecognized command"
+        }
+    }
+
+    // Check for "fill [fieldname] with [value]"
+    const fillMatch = cmd.match(/^fill (.*?) with (.*)$/);
+    if (fillMatch) {
+        const [_, fieldIdentifier, value] = fillMatch;
+        console.log("📝 Filling specific value:", fieldIdentifier, value);
+        await fillFormField(fieldIdentifier, value);
+        return true;
+    }
+
+    // Navigate between form fields
+    if (cmd === "next field") {
+        focusNextFormField();
+        return true;
+    }
+
+    if (cmd === "previous field") {
+        focusPreviousFormField();
+        return true;
+    }
+
+    return false;
+}
+
+async function fillWithDefaultValue(fieldIdentifier) {
+    console.log("🔄 Looking for default value for:", fieldIdentifier);
+    
+    try {
+        const { defaultFormValues = {} } = await chrome.storage.sync.get('defaultFormValues');
+        console.log("📋 Available default values:", defaultFormValues);
+
+        // Normalize the field identifier
+        const normalizedIdentifier = fieldIdentifier.toLowerCase().trim();
+        
+        // Try to find an exact match first
+        let defaultValue = defaultFormValues[normalizedIdentifier];
+        
+        // If no exact match, try to find a partial match
+        if (!defaultValue) {
+            const key = Object.keys(defaultFormValues).find(k => 
+                k.toLowerCase().includes(normalizedIdentifier) ||
+                normalizedIdentifier.includes(k.toLowerCase())
+            );
+            defaultValue = defaultFormValues[key];
+        }
+
+        if (defaultValue) {
+            console.log("✅ Found default value:", defaultValue);
+            await fillFormField(fieldIdentifier, defaultValue);
+            speak(`Filled ${fieldIdentifier} with default value`);
+            return true;
+        } else {
+            console.log("❌ No default value found");
+            speak(`No default value found for ${fieldIdentifier}`);
+            return false;
+        }
+    } catch (error) {
+        console.error("❌ Error accessing default values:", error);
+        speak("Error accessing default values");
+        return false;
+    }
+}
+
+function findFormField(identifier) {
+    if (DEBUG) console.log("🔍 Searching for field:", identifier);
+    
+    // Normalize identifier
+    identifier = identifier.toLowerCase().trim();
+
+    // Try multiple strategies to find the field
+    let field = null;
+
+    // 1. Try by label
+    const labels = Array.from(document.getElementsByTagName('label'));
+    const matchingLabel = labels.find(label => 
+        label.textContent.toLowerCase().includes(identifier)
+    );
+    if (matchingLabel?.getAttribute('for')) {
+        field = document.getElementById(matchingLabel.getAttribute('for'));
+        if (DEBUG && field) console.log("✅ Found by label");
+    }
+
+    // 2. Try by placeholder
+    if (!field) {
+        field = document.querySelector(
+            `input[placeholder*="${identifier}" i], 
+             textarea[placeholder*="${identifier}" i]`
+        );
+        if (DEBUG && field) console.log("✅ Found by placeholder");
+    }
+
+    // 3. Try by name or id
+    if (!field) {
+        field = document.querySelector(
+            `input[name*="${identifier}" i], 
+             input[id*="${identifier}" i],
+             input[type="email"],
+             textarea[name*="${identifier}" i], 
+             textarea[id*="${identifier}" i]`
+        );
+        if (DEBUG && field) console.log("✅ Found by name/id");
+    }
+
+    // 4. Try by type="email" for email fields
+    if (!field && identifier.includes('email')) {
+        field = document.querySelector('input[type="email"]');
+        if (DEBUG && field) console.log("✅ Found by email type");
+    }
+
+    if (DEBUG) {
+        if (field) {
+            console.log("✅ Field found:", field);
+        } else {
+            console.log("❌ No field found");
+        }
+    }
+
+    return field;
+}
+
+async function fillFormField(identifier, value) {
+    if (DEBUG) console.log(`🎯 Filling field: ${identifier} with value: ${value}`);
+
+    const field = findFormField(identifier);
+    
+    if (field) {
+        try {
+            // Scroll field into view
+            field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            // Focus and fill the field
+            field.focus();
+            field.value = value;
+            
+            // Trigger events
+            field.dispatchEvent(new Event('input', { bubbles: true }));
+            field.dispatchEvent(new Event('change', { bubbles: true }));
+            
+            speak(`Filled ${identifier} with ${value}`);
+            return true;
+        } catch (error) {
+            if (DEBUG) console.error("❌ Error filling field:", error);
+            speak(`Error filling ${identifier}`);
+            return false;
+        }
+    } else {
+        speak(`Could not find field ${identifier}`);
+        return false;
+    }
+}
+
+function focusNextFormField() {
+   const formElements = Array.from(document.querySelectorAll(
+      'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled])'
+   )).filter(el => el.offsetParent !== null); // Only visible elements
+
+   if (DEBUG) console.log("📝 Found form elements:", formElements);
+
+   const currentIndex = formElements.indexOf(document.activeElement);
+   const nextElement = formElements[currentIndex + 1] || formElements[0];
+   
+   if (nextElement) {
+      nextElement.focus();
+      nextElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const identifier = getFieldIdentifier(nextElement);
+      speak(`Focused on ${identifier}`);
+      if (DEBUG) console.log(`✅ Focused on element:`, nextElement);
+   } else {
+      speak("No form fields found");
+      if (DEBUG) console.log("❌ No form fields found");
+   }
+}
+
+function focusPreviousFormField() {
+   const formElements = Array.from(document.querySelectorAll(
+      'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled])'
+   )).filter(el => el.offsetParent !== null); // Only visible elements
+
+   if (DEBUG) console.log("📝 Found form elements:", formElements);
+
+   const currentIndex = formElements.indexOf(document.activeElement);
+   const prevElement = formElements[currentIndex - 1] || formElements[formElements.length - 1];
+   
+   if (prevElement) {
+      prevElement.focus();
+      prevElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const identifier = getFieldIdentifier(prevElement);
+      speak(`Focused on ${identifier}`);
+      if (DEBUG) console.log(`✅ Focused on element:`, prevElement);
+   } else {
+      speak("No form fields found");
+      if (DEBUG) console.log("❌ No form fields found");
+   }
+}
+
+function getFieldIdentifier(element) {
+   // Try to get the most meaningful identifier for the field
+   const label = document.querySelector(`label[for="${element.id}"]`);
+   const identifier = label?.textContent.trim() || 
+                     element.getAttribute('aria-label') || 
+                     element.placeholder || 
+                     element.name || 
+                     element.id || 
+                     element.tagName.toLowerCase();
+   
+   if (DEBUG) console.log(`📝 Field identifier for element:`, identifier);
+   return identifier;
 }

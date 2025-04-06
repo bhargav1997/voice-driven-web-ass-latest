@@ -61,3 +61,75 @@ window.deleteCommand = async function (index) {
 };
 
 loadCommands();
+
+// Add this to your options.js
+
+document.getElementById('defaultField').addEventListener('change', (e) => {
+    const customFieldGroup = document.getElementById('customFieldGroup');
+    if (e.target.value === 'custom') {
+        customFieldGroup.classList.add('visible');
+    } else {
+        customFieldGroup.classList.remove('visible');
+    }
+});
+
+document.getElementById('saveDefault').addEventListener('click', async () => {
+    const fieldType = document.getElementById('defaultField').value;
+    const customFieldName = document.getElementById('customFieldName').value;
+    const defaultValue = document.getElementById('defaultValue').value.trim();
+
+    if (!defaultValue) {
+        alert('Please enter a default value.');
+        return;
+    }
+
+    const fieldName = fieldType === 'custom' ? customFieldName : fieldType;
+
+    const { defaultFormValues = {} } = await chrome.storage.sync.get('defaultFormValues');
+    defaultFormValues[fieldName] = defaultValue;
+
+    await chrome.storage.sync.set({ defaultFormValues });
+    loadDefaultValues();
+    
+    // Clear inputs
+    document.getElementById('defaultValue').value = '';
+    document.getElementById('customFieldName').value = '';
+});
+
+async function loadDefaultValues() {
+    const { defaultFormValues = {} } = await chrome.storage.sync.get('defaultFormValues');
+    const container = document.getElementById('defaultValues');
+    container.innerHTML = '';
+
+    for (const [field, value] of Object.entries(defaultFormValues)) {
+        const div = document.createElement('div');
+        div.className = 'command-item';
+        
+        // Create tooltip for long values
+        const displayValue = value.length > 30 ? value.substring(0, 27) + '...' : value;
+        const tooltip = value.length > 30 ? value : '';
+        
+        div.innerHTML = `
+            <div class="command-info">
+                <strong>${field}</strong>
+                <span class="value-display" ${tooltip ? `data-tooltip="${tooltip}"` : ''}>${displayValue}</span>
+            </div>
+            <button class="delete-btn" data-field="${field}">Delete</button>
+        `;
+        container.appendChild(div);
+    }
+
+    // Add delete handlers
+    container.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const field = btn.dataset.field;
+            const { defaultFormValues } = await chrome.storage.sync.get('defaultFormValues');
+            delete defaultFormValues[field];
+            await chrome.storage.sync.set({ defaultFormValues });
+            loadDefaultValues();
+        });
+    });
+}
+
+// Load default values when page loads
+document.addEventListener('DOMContentLoaded', loadDefaultValues);
